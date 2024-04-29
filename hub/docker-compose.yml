@@ -1,0 +1,75 @@
+version: "3"
+
+services:
+  rabbitmq:
+    image: rabbitmq:management
+    ports:
+      - ${RABBITMQ_AMQP_PORT}:${RABBITMQ_AMQP_PORT}
+      - ${RABBITMQ_MANAGEMENT_PORT}:${RABBITMQ_MANAGEMENT_PORT}
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    networks:
+      - grid-network
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  mysql:
+    image: mysql:latest
+    ports:
+      - ${MYSQL_PORT}:${MYSQL_PORT}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    healthcheck:
+      test: mysqladmin ping -h 127.0.0.1 -u $$MYSQL_USER --password=$$MYSQL_PASSWORD
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 55
+    networks:
+      - grid-network
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  distributor:
+    build: .
+    command: node distributor.js
+    ports:
+      - ${DISTRIBUTOR_PORT}:${DISTRIBUTOR_PORT}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - grid-network
+
+  router:
+    build: .
+    command: node router.js
+    ports:
+      - ${ROUTER_PORT}:${ROUTER_PORT}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - grid-network
+
+volumes:
+  rabbitmq_data:
+  mysql_data:
+
+networks:
+  grid-network:
+    external: true
+
